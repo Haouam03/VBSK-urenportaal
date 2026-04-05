@@ -282,7 +282,7 @@ export default function AdminPage() {
                           href={`/api/export?trainer_id=${trainer.id}&month=${month}`}
                           className="text-xs bg-gray-100 hover:bg-gray-200 px-2 py-1 rounded transition"
                         >
-                          CSV
+                          Excel
                         </a>
                       )}
                     </div>

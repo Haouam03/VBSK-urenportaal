@@ -51,8 +51,20 @@ export default function LoginPage() {
       <div className="w-full max-w-sm">
         <div className="bg-white rounded-2xl shadow-lg p-8">
           <div className="text-center mb-8">
-            <div className="w-16 h-16 bg-red-600 rounded-full flex items-center justify-center mx-auto mb-4">
-              <span className="text-white text-2xl font-bold">V</span>
+            <img
+              src="/vbsk-logo.png"
+              alt="VBSK Albert Cuyp"
+              className="h-20 mx-auto mb-3 object-contain"
+              onError={(e) => {
+                const el = e.currentTarget;
+                el.style.display = "none";
+                el.parentElement!.querySelector(".fallback")!.classList.remove("hidden");
+              }}
+            />
+            <div className="fallback hidden">
+              <div className="w-16 h-16 bg-red-600 rounded-full flex items-center justify-center mx-auto mb-4">
+                <span className="text-white text-2xl font-bold">V</span>
+              </div>
             </div>
             <h1 className="text-2xl font-bold text-gray-900">VBSK Amsterdam</h1>
             <p className="text-gray-500 mt-1">Urenregistratie</p>
