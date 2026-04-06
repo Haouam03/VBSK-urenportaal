@@ -343,6 +343,21 @@ export default function AdminPage() {
             })
           )}
 
+          {/* Download all trainers button */}
+          {Object.keys(hoursByTrainer).length > 0 && (
+            <div className="mt-6">
+              <a
+                href={`/api/export?month=${month}`}
+                className="flex items-center justify-center gap-2 w-full bg-red-600 text-white rounded-xl py-3 font-medium hover:bg-red-700 transition"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 10v6m0 0l-3-3m3 3l3-3M3 17v3a2 2 0 002 2h14a2 2 0 002-2v-3" />
+                </svg>
+                Download overzicht alle trainers (Excel)
+              </a>
+            </div>
+          )}
+
           {/* Reject modal */}
           {rejectId && (
             <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
