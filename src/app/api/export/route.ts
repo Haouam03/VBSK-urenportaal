@@ -100,9 +100,8 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "month is verplicht" }, { status: 400 });
   }
 
-  // ── All trainers export ──
+  // ── All trainers export (single sheet) ──
   if (!trainerId) {
-    // Get all trainers that have hours this month
     const { data: allHours } = await supabase
       .from("hours")
       .select("*, trainer:trainers!hours_trainer_id_fkey(id, name), substitute:trainers!hours_substitute_for_id_fkey(name)")
@@ -124,45 +123,129 @@ export async function GET(req: NextRequest) {
       byTrainer[key].hours.push(h);
     }
 
+    const DARK_RED = "FF8B0000";
+    const LIGHT_GRAY = "FFF3F4F6";
+    const WHITE = "FFFFFFFF";
+    const DARK_GRAY = "FF4B5563";
+    const HEADER_COLS = ["Datum", "Dag", "Begintijd", "Eindtijd", "Uren", "Type", "Inval voor", "Opmerking", "Status"];
+
     const wb = new ExcelJS.Workbook();
+    const ws = wb.addWorksheet("Urenoverzicht");
 
-    // Create a summary sheet first
-    const summary = wb.addWorksheet("Overzicht");
-    summary.mergeCells("A1:C1");
-    const sumTitle = summary.getCell("A1");
-    sumTitle.value = `Urenoverzicht alle trainers — ${month}`;
-    sumTitle.font = { size: 14, bold: true };
-    sumTitle.alignment = { horizontal: "center" };
+    // Column widths
+    ws.columns = [
+      { width: 14 }, { width: 12 }, { width: 11 }, { width: 11 },
+      { width: 9 }, { width: 12 }, { width: 16 }, { width: 28 }, { width: 14 },
+    ];
 
-    const sumHeader = summary.addRow(["Trainer", "Aantal invoeren", "Totaal uren"]);
-    sumHeader.eachCell((cell) => {
-      cell.font = { bold: true, color: { argb: "FFFFFFFF" } };
-      cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF4B5563" } };
-      cell.alignment = { horizontal: "center" };
-    });
+    // Document title
+    ws.mergeCells("A1:I1");
+    const titleCell = ws.getCell("A1");
+    titleCell.value = `VBSK Amsterdam — Urenoverzicht ${month}`;
+    titleCell.font = { size: 16, bold: true, color: { argb: DARK_RED } };
+    titleCell.alignment = { horizontal: "center", vertical: "middle" };
+    ws.getRow(1).height = 30;
+
+    // Empty spacer row
+    ws.addRow([]);
 
     let grandTotal = 0;
+    let grandCount = 0;
     const sortedTrainers = Object.values(byTrainer).sort((a, b) => a.name.localeCompare(b.name));
 
     for (const { name, hours: trainerHours } of sortedTrainers) {
       const rows = buildRows(trainerHours);
-      const total = addTrainerSheet(wb, name, month, rows);
-      grandTotal += total;
+      const trainerTotal = rows.reduce((s, r) => s + r.uren, 0);
+      grandTotal += trainerTotal;
+      grandCount += rows.length;
 
-      const sRow = summary.addRow([name, rows.length, total]);
-      sRow.getCell(3).numFmt = "0.00";
-      sRow.getCell(2).alignment = { horizontal: "center" };
-      sRow.getCell(3).alignment = { horizontal: "center" };
+      // ── Trainer name banner (dark red, full width) ──
+      const bannerRow = ws.addRow([`${name}`, "", "", "", "", "", "", "", `${rows.length} invoer${rows.length !== 1 ? "en" : ""} — ${trainerTotal.toFixed(2)} uur`]);
+      ws.mergeCells(bannerRow.number, 1, bannerRow.number, 8);
+      bannerRow.height = 26;
+      bannerRow.eachCell((cell) => {
+        cell.font = { bold: true, size: 12, color: { argb: WHITE } };
+        cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: DARK_RED } };
+        cell.alignment = { vertical: "middle" };
+      });
+      bannerRow.getCell(9).alignment = { horizontal: "right", vertical: "middle" };
+      bannerRow.getCell(9).font = { bold: false, size: 10, color: { argb: WHITE } };
+
+      // ── Column headers ──
+      const headerRow = ws.addRow(HEADER_COLS);
+      headerRow.eachCell((cell) => {
+        cell.font = { bold: true, size: 10, color: { argb: WHITE } };
+        cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: DARK_GRAY } };
+        cell.alignment = { horizontal: "center", vertical: "middle" };
+        cell.border = {
+          bottom: { style: "thin", color: { argb: "FF000000" } },
+        };
+      });
+
+      // ── Data rows ──
+      rows.forEach((r, i) => {
+        const dataRow = ws.addRow([r.datum, r.dag, r.begintijd, r.eindtijd, r.uren, r.type, r.invalVoor, r.opmerking, r.status]);
+        dataRow.getCell(5).numFmt = "0.00";
+        dataRow.getCell(5).alignment = { horizontal: "center" };
+        dataRow.getCell(1).alignment = { horizontal: "left" };
+        dataRow.getCell(9).alignment = { horizontal: "center" };
+
+        // Status coloring
+        const statusCell = dataRow.getCell(9);
+        if (r.status === "goedgekeurd") {
+          statusCell.font = { color: { argb: "FF16A34A" }, bold: true, size: 10 };
+        } else if (r.status === "afgewezen") {
+          statusCell.font = { color: { argb: "FFDC2626" }, bold: true, size: 10 };
+        } else if (r.status === "ingediend") {
+          statusCell.font = { color: { argb: "FFCA8A04" }, bold: true, size: 10 };
+        }
+
+        // Alternating row background
+        if (i % 2 === 0) {
+          dataRow.eachCell((cell) => {
+            cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: LIGHT_GRAY } };
+          });
+        }
+
+        // Light borders for readability
+        dataRow.eachCell((cell) => {
+          cell.border = {
+            ...cell.border,
+            bottom: { style: "hair", color: { argb: "FFD1D5DB" } },
+          };
+        });
+      });
+
+      // ── Subtotal row ──
+      const subRow = ws.addRow(["", "", "", "Subtotaal", trainerTotal, "", "", "", ""]);
+      subRow.getCell(4).font = { bold: true, size: 10 };
+      subRow.getCell(5).font = { bold: true, size: 10 };
+      subRow.getCell(5).numFmt = "0.00";
+      subRow.getCell(5).alignment = { horizontal: "center" };
+      subRow.eachCell((cell) => {
+        cell.border = { top: { style: "thin", color: { argb: "FF000000" } } };
+      });
+
+      // Spacer row between trainers
+      ws.addRow([]);
     }
 
-    // Grand total row
-    const gtRow = summary.addRow(["Totaal", "", grandTotal]);
-    gtRow.getCell(1).font = { bold: true };
-    gtRow.getCell(3).font = { bold: true };
-    gtRow.getCell(3).numFmt = "0.00";
-    gtRow.getCell(3).alignment = { horizontal: "center" };
+    // ══ Grand total row ══
+    const gtBanner = ws.addRow(["TOTAAL ALLE TRAINERS", "", "", "", grandTotal, "", "", "", `${grandCount} invoeren`]);
+    ws.mergeCells(gtBanner.number, 1, gtBanner.number, 4);
+    gtBanner.height = 28;
+    gtBanner.eachCell((cell) => {
+      cell.font = { bold: true, size: 12, color: { argb: WHITE } };
+      cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: DARK_RED } };
+      cell.alignment = { vertical: "middle" };
+    });
+    gtBanner.getCell(5).numFmt = "0.00";
+    gtBanner.getCell(5).alignment = { horizontal: "center", vertical: "middle" };
+    gtBanner.getCell(9).alignment = { horizontal: "right", vertical: "middle" };
+    gtBanner.getCell(9).font = { bold: false, size: 10, color: { argb: WHITE } };
 
-    summary.columns = [{ width: 20 }, { width: 16 }, { width: 14 }];
+    // Print settings
+    ws.pageSetup = { orientation: "landscape", fitToPage: true, fitToWidth: 1, fitToHeight: 0 };
 
     const buffer = await wb.xlsx.writeBuffer();
     return new NextResponse(buffer, {
