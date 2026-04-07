@@ -4,6 +4,25 @@ import ExcelJS from "exceljs";
 
 const DAYS = ["Zondag", "Maandag", "Dinsdag", "Woensdag", "Donderdag", "Vrijdag", "Zaterdag"];
 
+// ── Exact kleuren uit sjabloon ──
+const C = {
+  TITLE_BG:    "FF7B1113",
+  BANNER_BG:   "FFA31D1F",
+  HEADER_BG:   "FF000000",
+  ONKOSTEN_BG: "FFC0392B",
+  ROW_PINK:    "FFFDF2F2",
+  ROW_WHITE:   "FFFFFFFF",
+  SUB_BG:      "FFF9E0E0",
+  GRAND_BG:    "FFFBE9E9",
+  WHITE:       "FFFFFFFF",
+  BLACK:       "FF000000",
+  GREEN:       "FF27AE60",
+  RED:         "FFE74C3C",
+  YELLOW:      "FFF39C12",
+};
+
+const FONT = "Aptos";
+
 function formatDateNL(dateStr: string) {
   const [y, m, d] = dateStr.split("-");
   return `${d}-${m}-${y}`;
@@ -35,59 +54,59 @@ function buildRows(hours: Array<Record<string, unknown>>) {
   });
 }
 
-function addTrainerSheet(
-  wb: ExcelJS.Workbook,
-  trainerName: string,
-  month: string,
-  rows: ReturnType<typeof buildRows>
-) {
-  const sheetName = trainerName.substring(0, 31); // Excel sheet name max 31 chars
-  const ws = wb.addWorksheet(sheetName);
+function statusText(status: string): string {
+  if (status === "goedgekeurd") return "\u2713 goedgekeurd";
+  if (status === "afgewezen") return "\u2717 afgewezen";
+  if (status === "ingediend") return "\u23F3 ingediend";
+  return status;
+}
 
-  // Title row
-  ws.mergeCells("A1:I1");
-  const titleCell = ws.getCell("A1");
-  titleCell.value = `${trainerName} — ${month}`;
-  titleCell.font = { size: 14, bold: true };
-  titleCell.alignment = { horizontal: "center" };
+function statusColor(status: string): string {
+  if (status === "goedgekeurd") return C.GREEN;
+  if (status === "afgewezen") return C.RED;
+  if (status === "ingediend") return C.YELLOW;
+  return C.BLACK;
+}
 
-  // Header row
-  const headerRow = ws.addRow(["Datum", "Dag", "Begintijd", "Eindtijd", "Uren", "Type", "Inval voor", "Opmerking", "Status"]);
-  headerRow.eachCell((cell) => {
-    cell.font = { bold: true, color: { argb: "FFFFFFFF" } };
-    cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF4B5563" } };
-    cell.alignment = { horizontal: "center" };
-    cell.border = {
-      bottom: { style: "thin", color: { argb: "FF000000" } },
-    };
-  });
-
-  // Data rows
-  for (const r of rows) {
-    const row = ws.addRow([r.datum, r.dag, r.begintijd, r.eindtijd, r.uren, r.type, r.invalVoor, r.opmerking, r.status]);
-    row.getCell(5).numFmt = "0.00";
-    row.getCell(5).alignment = { horizontal: "center" };
-    if (rows.indexOf(r) % 2 === 0) {
-      row.eachCell((cell) => {
-        cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFF9FAFB" } };
-      });
-    }
+// Fill all 9 cells of a row with a background color
+function fillRow(row: ExcelJS.Row, color: string) {
+  for (let col = 1; col <= 9; col++) {
+    row.getCell(col).fill = { type: "pattern", pattern: "solid", fgColor: { argb: color } };
   }
+}
 
-  // Totaal row
-  const totalRow = ws.addRow(["", "", "", "Totaal", rows.reduce((s, r) => s + r.uren, 0), "", "", "", ""]);
-  totalRow.getCell(4).font = { bold: true };
-  totalRow.getCell(5).font = { bold: true };
-  totalRow.getCell(5).numFmt = "0.00";
-  totalRow.getCell(5).alignment = { horizontal: "center" };
+// Set font for all 9 cells
+function fontRow(row: ExcelJS.Row, font: Partial<ExcelJS.Font>) {
+  for (let col = 1; col <= 9; col++) {
+    row.getCell(col).font = { name: FONT, ...font };
+  }
+}
 
-  // Column widths
+// Set top border on all 9 cells
+function borderTopRow(row: ExcelJS.Row, style: "thin" | "medium" = "thin") {
+  for (let col = 1; col <= 9; col++) {
+    row.getCell(col).border = { top: { style, color: { argb: C.BLACK } } };
+  }
+}
+
+function borderBottomRow(row: ExcelJS.Row, style: "thin" | "medium" = "medium") {
+  for (let col = 1; col <= 9; col++) {
+    row.getCell(col).border = { ...row.getCell(col).border, bottom: { style, color: { argb: C.BLACK } } };
+  }
+}
+
+function setupColumns(ws: ExcelJS.Worksheet) {
   ws.columns = [
-    { width: 14 }, { width: 12 }, { width: 10 }, { width: 10 },
-    { width: 8 }, { width: 10 }, { width: 16 }, { width: 24 }, { width: 14 },
+    { width: 15.83 },  // A - Datum
+    { width: 17.5 },   // B - Dag / Soort kosten
+    { width: 13.33 },  // C - Begintijd / Toelichting
+    { width: 27.5 },   // D - Eindtijd / Afstand
+    { width: 13 },     // E - Uren / Bedrag
+    { width: 13.33 },  // F - Type
+    { width: 17.5 },   // G - Inval voor
+    { width: 25.83 },  // H - Opmerking
+    { width: 29.16 },  // I - Status
   ];
-
-  return rows.reduce((s, r) => s + r.uren, 0);
 }
 
 export async function GET(req: NextRequest) {
@@ -100,9 +119,10 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "month is verplicht" }, { status: 400 });
   }
 
-  // ── All trainers export (single sheet) ──
+  // ══════════════════════════════════════════
+  // ALL TRAINERS EXPORT (single sheet)
+  // ══════════════════════════════════════════
   if (!trainerId) {
-    // Fetch hours and expenses in parallel
     const [{ data: allHours }, { data: allExpenses }] = await Promise.all([
       supabase
         .from("hours")
@@ -118,10 +138,10 @@ export async function GET(req: NextRequest) {
     ]);
 
     if ((!allHours || allHours.length === 0) && (!allExpenses || allExpenses.length === 0)) {
-      return NextResponse.json({ error: "Geen uren of onkosten gevonden voor deze maand" }, { status: 404 });
+      return NextResponse.json({ error: "Geen data gevonden voor deze maand" }, { status: 404 });
     }
 
-    // Group hours by trainer
+    // Group by trainer
     const byTrainer: Record<string, { name: string; hours: typeof allHours; expenses: typeof allExpenses }> = {};
     for (const h of (allHours || [])) {
       const t = h.trainer as { id: number; name: string };
@@ -130,7 +150,6 @@ export async function GET(req: NextRequest) {
       if (!byTrainer[key]) byTrainer[key] = { name: t.name, hours: [], expenses: [] };
       byTrainer[key].hours!.push(h);
     }
-    // Group expenses by trainer
     for (const e of (allExpenses || [])) {
       const t = e.trainer as { id: number; name: string };
       if (!t) continue;
@@ -139,145 +158,121 @@ export async function GET(req: NextRequest) {
       byTrainer[key].expenses!.push(e);
     }
 
-    const DARK_RED = "FF8B0000";
-    const LIGHT_GRAY = "FFF3F4F6";
-    const WHITE = "FFFFFFFF";
-    const DARK_GRAY = "FF4B5563";
-    const EXPENSE_BLUE = "FF1E3A5F";
-    const HEADER_COLS = ["Datum", "Dag", "Begintijd", "Eindtijd", "Uren", "Type", "Inval voor", "Opmerking", "Status"];
-    const EXPENSE_HEADER_COLS = ["Datum", "Categorie", "Omschrijving", "", "Bedrag", "", "", "", "Status"];
-
     const wb = new ExcelJS.Workbook();
     const ws = wb.addWorksheet("Overzicht");
+    setupColumns(ws);
 
-    // Column widths
-    ws.columns = [
-      { width: 14 }, { width: 14 }, { width: 11 }, { width: 11 },
-      { width: 11 }, { width: 12 }, { width: 16 }, { width: 28 }, { width: 14 },
-    ];
-
-    // Document title
+    // ── Row 1: Title ──
     ws.mergeCells("A1:I1");
     const titleCell = ws.getCell("A1");
-    titleCell.value = `VBSK Amsterdam — Uren & Onkosten ${month}`;
-    titleCell.font = { size: 16, bold: true, color: { argb: DARK_RED } };
+    titleCell.value = `VBSK Amsterdam \u2014 Uren & Onkosten ${month}`;
+    titleCell.font = { name: FONT, size: 15, bold: true, color: { argb: C.WHITE } };
+    titleCell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: C.TITLE_BG } };
     titleCell.alignment = { horizontal: "center", vertical: "middle" };
-    ws.getRow(1).height = 30;
+    ws.getRow(1).height = 42;
 
+    // ── Row 2: Spacer ──
     ws.addRow([]);
+    ws.getRow(2).height = 8;
 
-    let grandTotalHours = 0;
-    let grandTotalExpenses = 0;
-    let grandCountHours = 0;
-    let grandCountExpenses = 0;
+    // Track subtotal cell references for grand total formulas
+    const urenSubCells: string[] = [];
+    const onkostenSubCells: string[] = [];
+
     const sortedTrainers = Object.values(byTrainer).sort((a, b) => a.name.localeCompare(b.name));
 
     for (const { name, hours: trainerHours, expenses: trainerExpenses } of sortedTrainers) {
       const rows = buildRows(trainerHours || []);
-      const trainerTotalHours = rows.reduce((s, r) => s + r.uren, 0);
-      const trainerTotalExpenses = (trainerExpenses || []).reduce((s, e) => s + ((e as Record<string, unknown>).amount as number), 0);
-      grandTotalHours += trainerTotalHours;
-      grandTotalExpenses += trainerTotalExpenses;
-      grandCountHours += rows.length;
-      grandCountExpenses += (trainerExpenses || []).length;
+      const expRows = (trainerExpenses || []) as Array<Record<string, unknown>>;
 
-      // ── Trainer name banner (dark red, full width) ──
-      const summaryParts: string[] = [];
-      if (rows.length > 0) summaryParts.push(`${trainerTotalHours.toFixed(2)} uur`);
-      if ((trainerExpenses || []).length > 0) summaryParts.push(`\u20AC${trainerTotalExpenses.toFixed(2)} onkosten`);
-      const bannerRow = ws.addRow([name, "", "", "", "", "", "", "", summaryParts.join("  |  ")]);
+      // ── Trainer banner ──
+      const bannerRow = ws.addRow([name, "", "", "", "", "", "", "", ""]);
       ws.mergeCells(bannerRow.number, 1, bannerRow.number, 8);
-      bannerRow.height = 28;
-      bannerRow.eachCell((cell) => {
-        cell.font = { bold: true, size: 13, color: { argb: WHITE } };
-        cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: DARK_RED } };
-        cell.alignment = { vertical: "middle" };
-      });
+      bannerRow.height = 32;
+      fillRow(bannerRow, C.BANNER_BG);
+      fontRow(bannerRow, { size: 13, bold: true, color: { argb: C.WHITE } });
+      bannerRow.getCell(1).alignment = { vertical: "middle" };
+      // I cell: summary will be set after we know subtotal cell references
       bannerRow.getCell(9).alignment = { horizontal: "right", vertical: "middle" };
-      bannerRow.getCell(9).font = { bold: false, size: 10, color: { argb: WHITE } };
+      bannerRow.getCell(9).font = { name: FONT, size: 10, bold: true, color: { argb: C.WHITE } };
+      bannerRow.getCell(9).fill = { type: "pattern", pattern: "solid", fgColor: { argb: C.TITLE_BG } };
+      const bannerRowNum = bannerRow.number;
 
-      // ── UREN SECTIE ──
-      if (rows.length > 0) {
-        // Column headers
-        const headerRow = ws.addRow(HEADER_COLS);
-        headerRow.eachCell((cell) => {
-          cell.font = { bold: true, size: 10, color: { argb: WHITE } };
-          cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: DARK_GRAY } };
-          cell.alignment = { horizontal: "center", vertical: "middle" };
-          cell.border = { bottom: { style: "thin", color: { argb: "FF000000" } } };
-        });
+      // ── Uren headers ──
+      const hdrRow = ws.addRow(["Datum", "Dag", "Begintijd", "Eindtijd", "Uren", "Type", "Inval voor", "Opmerking", "Status"]);
+      hdrRow.height = 26;
+      fillRow(hdrRow, C.HEADER_BG);
+      hdrRow.eachCell((cell) => {
+        cell.font = { name: FONT, size: 10, bold: true, color: { argb: C.WHITE } };
+        cell.alignment = { horizontal: "center", vertical: "middle" };
+        cell.border = { bottom: { style: "thin", color: { argb: C.BLACK } } };
+      });
 
-        // Data rows
-        rows.forEach((r, i) => {
-          const dataRow = ws.addRow([r.datum, r.dag, r.begintijd, r.eindtijd, r.uren, r.type, r.invalVoor, r.opmerking, r.status]);
-          dataRow.getCell(5).numFmt = "0.00";
-          dataRow.getCell(5).alignment = { horizontal: "center" };
-          dataRow.getCell(1).alignment = { horizontal: "left" };
-          dataRow.getCell(9).alignment = { horizontal: "center" };
-
-          const statusCell = dataRow.getCell(9);
-          if (r.status === "goedgekeurd") {
-            statusCell.font = { color: { argb: "FF16A34A" }, bold: true, size: 10 };
-          } else if (r.status === "afgewezen") {
-            statusCell.font = { color: { argb: "FFDC2626" }, bold: true, size: 10 };
-          } else if (r.status === "ingediend") {
-            statusCell.font = { color: { argb: "FFCA8A04" }, bold: true, size: 10 };
-          }
-
-          if (i % 2 === 0) {
-            dataRow.eachCell((cell) => {
-              cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: LIGHT_GRAY } };
-            });
-          }
-          dataRow.eachCell((cell) => {
-            cell.border = { ...cell.border, bottom: { style: "hair", color: { argb: "FFD1D5DB" } } };
-          });
-        });
-
-        // Subtotal uren
-        const subRow = ws.addRow(["", "", "", "Subtotaal uren", trainerTotalHours, "", "", "", ""]);
-        subRow.getCell(4).font = { bold: true, size: 10 };
-        subRow.getCell(5).font = { bold: true, size: 10 };
-        subRow.getCell(5).numFmt = "0.00";
-        subRow.getCell(5).alignment = { horizontal: "center" };
-        subRow.eachCell((cell) => {
-          cell.border = { top: { style: "thin", color: { argb: "FF000000" } } };
-        });
-      }
-
-      // ── ONKOSTEN SECTIE ──
-      if ((trainerExpenses || []).length > 0) {
-        // Small spacer if there were also hours
-        if (rows.length > 0) {
-          const spacer = ws.addRow([]);
-          spacer.height = 6;
+      // ── Uren data rows ──
+      const firstDataRow = ws.rowCount + 1;
+      rows.forEach((r, i) => {
+        const bgColor = i % 2 === 0 ? C.ROW_PINK : C.ROW_WHITE;
+        const dataRow = ws.addRow([r.datum, r.dag, r.begintijd, r.eindtijd, r.uren, r.type, r.invalVoor, r.opmerking, statusText(r.status)]);
+        dataRow.height = 24;
+        fillRow(dataRow, bgColor);
+        fontRow(dataRow, { size: 11, color: { argb: C.BLACK } });
+        dataRow.getCell(1).alignment = { horizontal: "left" };
+        dataRow.getCell(5).numFmt = "0.00";
+        dataRow.getCell(5).alignment = { horizontal: "center" };
+        dataRow.getCell(9).alignment = { horizontal: "center" };
+        dataRow.getCell(9).font = { name: FONT, size: 10, bold: true, color: { argb: statusColor(r.status) } };
+        if (i > 0) {
+          borderTopRow(dataRow, "thin");
         }
+      });
+      const lastDataRow = ws.rowCount;
 
-        // Onkosten sub-header
-        const expLabel = ws.addRow(["ONKOSTEN", "", "", "", "", "", "", "", ""]);
-        ws.mergeCells(expLabel.number, 1, expLabel.number, 9);
-        expLabel.getCell(1).font = { bold: true, size: 10, color: { argb: WHITE } };
-        expLabel.getCell(1).fill = { type: "pattern", pattern: "solid", fgColor: { argb: EXPENSE_BLUE } };
-        expLabel.getCell(1).alignment = { vertical: "middle" };
-        expLabel.height = 22;
+      // ── Subtotaal uren ──
+      const subRow = ws.addRow(["", "", "", "Subtotaal uren", null, "", "", "", ""]);
+      subRow.height = 24;
+      fillRow(subRow, C.SUB_BG);
+      fontRow(subRow, { size: 10, bold: true, color: { argb: C.BLACK } });
+      borderTopRow(subRow, "thin");
+      subRow.getCell(4).alignment = { horizontal: "right" };
+      // Use SUM formula
+      const urenSubRowNum = subRow.number;
+      if (rows.length > 0) {
+        subRow.getCell(5).value = { formula: `SUM(E${firstDataRow}:E${lastDataRow})` } as ExcelJS.CellFormulaValue;
+      } else {
+        subRow.getCell(5).value = 0;
+      }
+      subRow.getCell(5).numFmt = "0.00";
+      subRow.getCell(5).alignment = { horizontal: "center" };
+      urenSubCells.push(`E${urenSubRowNum}`);
 
-        // Expense column headers
-        const expHeaderRow = ws.addRow(EXPENSE_HEADER_COLS);
-        expHeaderRow.eachCell((cell, colNumber) => {
-          cell.font = { bold: true, size: 10, color: { argb: WHITE } };
-          cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: DARK_GRAY } };
-          cell.alignment = { horizontal: "center", vertical: "middle" };
-          cell.border = { bottom: { style: "thin", color: { argb: "FF000000" } } };
-          // Hide empty header cells visually
-          if (colNumber === 4 || colNumber === 6 || colNumber === 7 || colNumber === 8) {
-            cell.value = "";
-          }
-        });
+      // ── Spacer ──
+      const sp1 = ws.addRow([]);
+      sp1.height = 10;
 
-        // Expense data rows
-        (trainerExpenses || []).forEach((exp, i) => {
-          const e = exp as Record<string, unknown>;
-          const expRow = ws.addRow([
+      // ── Onkosten header banner ──
+      const expBanner = ws.addRow([`ONKOSTEN ${name.toUpperCase()}`, "", "", "", "", "", "", "", ""]);
+      ws.mergeCells(expBanner.number, 1, expBanner.number, 9);
+      expBanner.height = 26;
+      fillRow(expBanner, C.ONKOSTEN_BG);
+      expBanner.getCell(1).font = { name: FONT, size: 10, bold: true, color: { argb: C.WHITE } };
+      expBanner.getCell(1).alignment = { horizontal: "left", vertical: "middle" };
+
+      // ── Onkosten column headers ──
+      const expHdrRow = ws.addRow(["Datum", "Soort kosten", "Toelichting", "Afstand (km)", "Bedrag", "", "", "", "Status"]);
+      expHdrRow.height = 26;
+      fillRow(expHdrRow, C.HEADER_BG);
+      expHdrRow.eachCell((cell) => {
+        cell.font = { name: FONT, size: 10, bold: true, color: { argb: C.WHITE } };
+        cell.alignment = { horizontal: "center", vertical: "middle" };
+        cell.border = { bottom: { style: "thin", color: { argb: C.BLACK } } };
+      });
+
+      // ── Onkosten data rows ──
+      const firstExpRow = ws.rowCount + 1;
+      if (expRows.length > 0) {
+        expRows.forEach((e, i) => {
+          const bgColor = i % 2 === 0 ? C.ROW_PINK : C.ROW_WHITE;
+          const expDataRow = ws.addRow([
             formatDateNL(e.date as string),
             e.category as string,
             e.description as string,
@@ -286,84 +281,81 @@ export async function GET(req: NextRequest) {
             "",
             "",
             "",
-            e.status as string,
+            statusText(e.status as string),
           ]);
-          ws.mergeCells(expRow.number, 2, expRow.number, 3);
-          ws.mergeCells(expRow.number, 6, expRow.number, 8);
-          expRow.getCell(5).numFmt = "\u20AC#,##0.00";
-          expRow.getCell(5).alignment = { horizontal: "center" };
-          expRow.getCell(9).alignment = { horizontal: "center" };
-
-          const statusCell = expRow.getCell(9);
-          if ((e.status as string) === "goedgekeurd") {
-            statusCell.font = { color: { argb: "FF16A34A" }, bold: true, size: 10 };
-          } else if ((e.status as string) === "afgewezen") {
-            statusCell.font = { color: { argb: "FFDC2626" }, bold: true, size: 10 };
-          } else if ((e.status as string) === "ingediend") {
-            statusCell.font = { color: { argb: "FFCA8A04" }, bold: true, size: 10 };
-          }
-
-          if (i % 2 === 0) {
-            expRow.eachCell((cell) => {
-              cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: LIGHT_GRAY } };
-            });
-          }
-          expRow.eachCell((cell) => {
-            cell.border = { ...cell.border, bottom: { style: "hair", color: { argb: "FFD1D5DB" } } };
-          });
-        });
-
-        // Subtotal onkosten
-        const expSubRow = ws.addRow(["", "", "", "Subtotaal onkosten", trainerTotalExpenses, "", "", "", ""]);
-        expSubRow.getCell(4).font = { bold: true, size: 10 };
-        expSubRow.getCell(5).font = { bold: true, size: 10 };
-        expSubRow.getCell(5).numFmt = "\u20AC#,##0.00";
-        expSubRow.getCell(5).alignment = { horizontal: "center" };
-        expSubRow.eachCell((cell) => {
-          cell.border = { top: { style: "thin", color: { argb: "FF000000" } } };
+          expDataRow.height = 24;
+          fillRow(expDataRow, bgColor);
+          fontRow(expDataRow, { size: 11, color: { argb: C.BLACK } });
+          ws.mergeCells(expDataRow.number, 2, expDataRow.number, 3);
+          ws.mergeCells(expDataRow.number, 6, expDataRow.number, 8);
+          expDataRow.getCell(1).alignment = { horizontal: "left" };
+          expDataRow.getCell(5).numFmt = "\\€#,##0.00";
+          expDataRow.getCell(5).alignment = { horizontal: "center" };
+          expDataRow.getCell(9).alignment = { horizontal: "center" };
+          expDataRow.getCell(9).font = { name: FONT, size: 10, bold: true, color: { argb: statusColor(e.status as string) } };
         });
       }
+      const lastExpRow = ws.rowCount;
 
-      // Spacer row between trainers
-      ws.addRow([]);
+      // ── Subtotaal onkosten ──
+      const expSubRow = ws.addRow(["", "", "", `Subtotaal onkosten ${name}`, null, "", "", "", ""]);
+      expSubRow.height = 24;
+      fillRow(expSubRow, C.SUB_BG);
+      fontRow(expSubRow, { size: 10, bold: true, color: { argb: C.BLACK } });
+      borderTopRow(expSubRow, "thin");
+      expSubRow.getCell(4).alignment = { horizontal: "right" };
+      const expSubRowNum = expSubRow.number;
+      if (expRows.length > 0) {
+        expSubRow.getCell(5).value = { formula: `SUM(E${firstExpRow}:E${lastExpRow})` } as ExcelJS.CellFormulaValue;
+      } else {
+        expSubRow.getCell(5).value = 0;
+      }
+      expSubRow.getCell(5).numFmt = "\\€#,##0.00";
+      expSubRow.getCell(5).alignment = { horizontal: "center" };
+      onkostenSubCells.push(`E${expSubRowNum}`);
+
+      // ── Update banner summary with formula referencing subtotals ──
+      ws.getCell(`I${bannerRowNum}`).value = {
+        formula: `TEXT(E${urenSubRowNum},"0,00")&" uur  |  \u20AC "&TEXT(E${expSubRowNum},"#.##0,00")&" onkosten"`,
+      } as ExcelJS.CellFormulaValue;
+
+      // ── Spacer between trainers ──
+      const sp2 = ws.addRow([]);
+      sp2.height = 10;
     }
 
     // ══ Grand total banner ══
     const gtBanner = ws.addRow(["TOTAAL ALLE TRAINERS", "", "", "", "", "", "", "", ""]);
     ws.mergeCells(gtBanner.number, 1, gtBanner.number, 9);
-    gtBanner.height = 28;
-    gtBanner.getCell(1).font = { bold: true, size: 13, color: { argb: WHITE } };
-    gtBanner.getCell(1).fill = { type: "pattern", pattern: "solid", fgColor: { argb: DARK_RED } };
+    gtBanner.height = 32;
+    fillRow(gtBanner, C.BANNER_BG);
+    gtBanner.getCell(1).font = { name: FONT, size: 13, bold: true, color: { argb: C.WHITE } };
     gtBanner.getCell(1).alignment = { vertical: "middle" };
-    // Fill all cells with dark red
-    gtBanner.eachCell((cell) => {
-      cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: DARK_RED } };
-    });
 
-    // Grand total uren row
-    if (grandCountHours > 0) {
-      const gtHoursRow = ws.addRow(["", "", "", `Totaal uren (${grandCountHours} invoeren)`, grandTotalHours, "", "", "", ""]);
-      gtHoursRow.getCell(4).font = { bold: true, size: 11 };
-      gtHoursRow.getCell(5).font = { bold: true, size: 11 };
-      gtHoursRow.getCell(5).numFmt = "0.00";
-      gtHoursRow.getCell(5).alignment = { horizontal: "center" };
-      gtHoursRow.eachCell((cell) => {
-        cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFFEF2F2" } };
-      });
-    }
+    // ── Totaal uren row ──
+    const gtUrenRow = ws.addRow(["", "", "", "Totaal uren", null, "", "", "", ""]);
+    gtUrenRow.height = 28;
+    fillRow(gtUrenRow, C.GRAND_BG);
+    fontRow(gtUrenRow, { size: 11, color: { argb: C.BLACK } });
+    gtUrenRow.getCell(4).font = { name: FONT, size: 12, bold: true, color: { argb: C.BLACK } };
+    gtUrenRow.getCell(4).alignment = { horizontal: "right" };
+    gtUrenRow.getCell(5).value = { formula: urenSubCells.join("+") } as ExcelJS.CellFormulaValue;
+    gtUrenRow.getCell(5).font = { name: FONT, size: 12, bold: true, color: { argb: C.BLACK } };
+    gtUrenRow.getCell(5).numFmt = "0.00";
+    gtUrenRow.getCell(5).alignment = { horizontal: "center" };
 
-    // Grand total onkosten row
-    if (grandCountExpenses > 0) {
-      const gtExpRow = ws.addRow(["", "", "", `Totaal onkosten (${grandCountExpenses} invoeren)`, grandTotalExpenses, "", "", "", ""]);
-      gtExpRow.getCell(4).font = { bold: true, size: 11 };
-      gtExpRow.getCell(5).font = { bold: true, size: 11 };
-      gtExpRow.getCell(5).numFmt = "\u20AC#,##0.00";
-      gtExpRow.getCell(5).alignment = { horizontal: "center" };
-      gtExpRow.eachCell((cell) => {
-        cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFFEF2F2" } };
-        cell.border = { bottom: { style: "thin", color: { argb: DARK_RED } } };
-      });
-    }
+    // ── Totaal onkosten row ──
+    const gtExpRow = ws.addRow(["", "", "", "Totaal onkosten", null, "", "", "", ""]);
+    gtExpRow.height = 28;
+    fillRow(gtExpRow, C.GRAND_BG);
+    fontRow(gtExpRow, { size: 11, color: { argb: C.BLACK } });
+    borderBottomRow(gtExpRow, "medium");
+    gtExpRow.getCell(4).font = { name: FONT, size: 12, bold: true, color: { argb: C.BLACK } };
+    gtExpRow.getCell(4).alignment = { horizontal: "right" };
+    gtExpRow.getCell(5).value = { formula: onkostenSubCells.join("+") } as ExcelJS.CellFormulaValue;
+    gtExpRow.getCell(5).font = { name: FONT, size: 12, bold: true, color: { argb: C.BLACK } };
+    gtExpRow.getCell(5).numFmt = "\\€#,##0.00";
+    gtExpRow.getCell(5).alignment = { horizontal: "center" };
 
     // Print settings
     ws.pageSetup = { orientation: "landscape", fitToPage: true, fitToWidth: 1, fitToHeight: 0 };
@@ -377,7 +369,9 @@ export async function GET(req: NextRequest) {
     });
   }
 
-  // ── Single trainer export ──
+  // ══════════════════════════════════════════
+  // SINGLE TRAINER EXPORT
+  // ══════════════════════════════════════════
   const { data: trainer } = await supabase
     .from("trainers")
     .select("name")
@@ -388,15 +382,24 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "Trainer niet gevonden" }, { status: 404 });
   }
 
-  const { data: hours } = await supabase
-    .from("hours")
-    .select("*, substitute:trainers!hours_substitute_for_id_fkey(name)")
-    .eq("trainer_id", trainerId)
-    .like("date", `${month}%`)
-    .order("date")
-    .order("start_time");
+  const [{ data: hours }, { data: expenses }] = await Promise.all([
+    supabase
+      .from("hours")
+      .select("*, substitute:trainers!hours_substitute_for_id_fkey(name)")
+      .eq("trainer_id", trainerId)
+      .like("date", `${month}%`)
+      .order("date")
+      .order("start_time"),
+    supabase
+      .from("expenses")
+      .select("*")
+      .eq("trainer_id", trainerId)
+      .like("date", `${month}%`)
+      .order("date"),
+  ]);
 
   const rows = buildRows(hours || []);
+  const expRows = (expenses || []) as Array<Record<string, unknown>>;
 
   if (format === "csv") {
     const header = "Datum,Dag,Begintijd,Eindtijd,Uren,Type,Inval voor,Opmerking,Status";
@@ -404,7 +407,6 @@ export async function GET(req: NextRequest) {
       [r.datum, r.dag, r.begintijd, r.eindtijd, r.uren, r.type, r.invalVoor, `"${r.opmerking.replace(/"/g, '""')}"`, r.status].join(",")
     );
     const csv = [header, ...csvRows].join("\n");
-
     return new NextResponse(csv, {
       headers: {
         "Content-Type": "text/csv; charset=utf-8",
@@ -413,12 +415,151 @@ export async function GET(req: NextRequest) {
     });
   }
 
-  // Excel export
+  // Excel export — same styling as all-trainers but for single trainer
   const wb = new ExcelJS.Workbook();
-  addTrainerSheet(wb, trainer.name, month, rows);
+  const ws = wb.addWorksheet("Overzicht");
+  setupColumns(ws);
+
+  // Title
+  ws.mergeCells("A1:I1");
+  const titleCell = ws.getCell("A1");
+  titleCell.value = `VBSK Amsterdam \u2014 Uren & Onkosten ${month}`;
+  titleCell.font = { name: FONT, size: 15, bold: true, color: { argb: C.WHITE } };
+  titleCell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: C.TITLE_BG } };
+  titleCell.alignment = { horizontal: "center", vertical: "middle" };
+  ws.getRow(1).height = 42;
+
+  ws.addRow([]);
+  ws.getRow(2).height = 8;
+
+  // Trainer banner
+  const bannerRow = ws.addRow([trainer.name, "", "", "", "", "", "", "", ""]);
+  ws.mergeCells(bannerRow.number, 1, bannerRow.number, 8);
+  bannerRow.height = 32;
+  fillRow(bannerRow, C.BANNER_BG);
+  fontRow(bannerRow, { size: 13, bold: true, color: { argb: C.WHITE } });
+  bannerRow.getCell(1).alignment = { vertical: "middle" };
+  bannerRow.getCell(9).alignment = { horizontal: "right", vertical: "middle" };
+  bannerRow.getCell(9).font = { name: FONT, size: 10, bold: true, color: { argb: C.WHITE } };
+  bannerRow.getCell(9).fill = { type: "pattern", pattern: "solid", fgColor: { argb: C.TITLE_BG } };
+
+  // Uren headers
+  const hdrRow = ws.addRow(["Datum", "Dag", "Begintijd", "Eindtijd", "Uren", "Type", "Inval voor", "Opmerking", "Status"]);
+  hdrRow.height = 26;
+  fillRow(hdrRow, C.HEADER_BG);
+  hdrRow.eachCell((cell) => {
+    cell.font = { name: FONT, size: 10, bold: true, color: { argb: C.WHITE } };
+    cell.alignment = { horizontal: "center", vertical: "middle" };
+    cell.border = { bottom: { style: "thin", color: { argb: C.BLACK } } };
+  });
+
+  // Uren data
+  const firstDataRow = ws.rowCount + 1;
+  rows.forEach((r, i) => {
+    const bgColor = i % 2 === 0 ? C.ROW_PINK : C.ROW_WHITE;
+    const dataRow = ws.addRow([r.datum, r.dag, r.begintijd, r.eindtijd, r.uren, r.type, r.invalVoor, r.opmerking, statusText(r.status)]);
+    dataRow.height = 24;
+    fillRow(dataRow, bgColor);
+    fontRow(dataRow, { size: 11, color: { argb: C.BLACK } });
+    dataRow.getCell(1).alignment = { horizontal: "left" };
+    dataRow.getCell(5).numFmt = "0.00";
+    dataRow.getCell(5).alignment = { horizontal: "center" };
+    dataRow.getCell(9).alignment = { horizontal: "center" };
+    dataRow.getCell(9).font = { name: FONT, size: 10, bold: true, color: { argb: statusColor(r.status) } };
+    if (i > 0) borderTopRow(dataRow, "thin");
+  });
+  const lastDataRow = ws.rowCount;
+
+  // Subtotaal uren
+  const subRow = ws.addRow(["", "", "", "Subtotaal uren", null, "", "", "", ""]);
+  subRow.height = 24;
+  fillRow(subRow, C.SUB_BG);
+  fontRow(subRow, { size: 10, bold: true, color: { argb: C.BLACK } });
+  borderTopRow(subRow, "thin");
+  subRow.getCell(4).alignment = { horizontal: "right" };
+  const urenSubRowNum = subRow.number;
+  if (rows.length > 0) {
+    subRow.getCell(5).value = { formula: `SUM(E${firstDataRow}:E${lastDataRow})` } as ExcelJS.CellFormulaValue;
+  } else {
+    subRow.getCell(5).value = 0;
+  }
+  subRow.getCell(5).numFmt = "0.00";
+  subRow.getCell(5).alignment = { horizontal: "center" };
+
+  // Spacer
+  const sp1 = ws.addRow([]);
+  sp1.height = 10;
+
+  // Onkosten banner
+  const expBanner = ws.addRow([`ONKOSTEN ${trainer.name.toUpperCase()}`, "", "", "", "", "", "", "", ""]);
+  ws.mergeCells(expBanner.number, 1, expBanner.number, 9);
+  expBanner.height = 26;
+  fillRow(expBanner, C.ONKOSTEN_BG);
+  expBanner.getCell(1).font = { name: FONT, size: 10, bold: true, color: { argb: C.WHITE } };
+  expBanner.getCell(1).alignment = { horizontal: "left", vertical: "middle" };
+
+  // Onkosten headers
+  const expHdrRow = ws.addRow(["Datum", "Soort kosten", "Toelichting", "Afstand (km)", "Bedrag", "", "", "", "Status"]);
+  expHdrRow.height = 26;
+  fillRow(expHdrRow, C.HEADER_BG);
+  expHdrRow.eachCell((cell) => {
+    cell.font = { name: FONT, size: 10, bold: true, color: { argb: C.WHITE } };
+    cell.alignment = { horizontal: "center", vertical: "middle" };
+    cell.border = { bottom: { style: "thin", color: { argb: C.BLACK } } };
+  });
+
+  // Onkosten data
+  const firstExpRow = ws.rowCount + 1;
+  if (expRows.length > 0) {
+    expRows.forEach((e, i) => {
+      const bgColor = i % 2 === 0 ? C.ROW_PINK : C.ROW_WHITE;
+      const expDataRow = ws.addRow([
+        formatDateNL(e.date as string),
+        e.category as string,
+        e.description as string,
+        "",
+        e.amount as number,
+        "", "", "",
+        statusText(e.status as string),
+      ]);
+      expDataRow.height = 24;
+      fillRow(expDataRow, bgColor);
+      fontRow(expDataRow, { size: 11, color: { argb: C.BLACK } });
+      ws.mergeCells(expDataRow.number, 2, expDataRow.number, 3);
+      ws.mergeCells(expDataRow.number, 6, expDataRow.number, 8);
+      expDataRow.getCell(1).alignment = { horizontal: "left" };
+      expDataRow.getCell(5).numFmt = "\\€#,##0.00";
+      expDataRow.getCell(5).alignment = { horizontal: "center" };
+      expDataRow.getCell(9).alignment = { horizontal: "center" };
+      expDataRow.getCell(9).font = { name: FONT, size: 10, bold: true, color: { argb: statusColor(e.status as string) } };
+    });
+  }
+  const lastExpRow = ws.rowCount;
+
+  // Subtotaal onkosten
+  const expSubRow = ws.addRow(["", "", "", `Subtotaal onkosten ${trainer.name}`, null, "", "", "", ""]);
+  expSubRow.height = 24;
+  fillRow(expSubRow, C.SUB_BG);
+  fontRow(expSubRow, { size: 10, bold: true, color: { argb: C.BLACK } });
+  borderTopRow(expSubRow, "thin");
+  expSubRow.getCell(4).alignment = { horizontal: "right" };
+  const expSubRowNum = expSubRow.number;
+  if (expRows.length > 0) {
+    expSubRow.getCell(5).value = { formula: `SUM(E${firstExpRow}:E${lastExpRow})` } as ExcelJS.CellFormulaValue;
+  } else {
+    expSubRow.getCell(5).value = 0;
+  }
+  expSubRow.getCell(5).numFmt = "\\€#,##0.00";
+  expSubRow.getCell(5).alignment = { horizontal: "center" };
+
+  // Update banner summary
+  ws.getCell(`I${bannerRow.number}`).value = {
+    formula: `TEXT(E${urenSubRowNum},"0,00")&" uur  |  \u20AC "&TEXT(E${expSubRowNum},"#.##0,00")&" onkosten"`,
+  } as ExcelJS.CellFormulaValue;
+
+  ws.pageSetup = { orientation: "landscape", fitToPage: true, fitToWidth: 1, fitToHeight: 0 };
 
   const buffer = await wb.xlsx.writeBuffer();
-
   return new NextResponse(buffer, {
     headers: {
       "Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
