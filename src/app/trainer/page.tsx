@@ -2,11 +2,17 @@
 
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { useRouter } from "next/navigation";
+import { type Lang, tr } from "@/lib/translations";
 
-const DAY_LABELS = ["Ma", "Di", "Wo", "Do", "Vr", "Za", "Zo"];
-const MONTH_NAMES = [
+const DAY_LABELS_NL = ["Ma", "Di", "Wo", "Do", "Vr", "Za", "Zo"];
+const DAY_LABELS_EN = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+const MONTH_NAMES_NL = [
   "Januari", "Februari", "Maart", "April", "Mei", "Juni",
   "Juli", "Augustus", "September", "Oktober", "November", "December",
+];
+const MONTH_NAMES_EN = [
+  "January", "February", "March", "April", "May", "June",
+  "July", "August", "September", "October", "November", "December",
 ];
 
 interface ScheduleSlot {
@@ -49,7 +55,6 @@ interface Trainer {
 function getMonthDays(year: number, month: number) {
   const firstDay = new Date(year, month, 1);
   const lastDay = new Date(year, month + 1, 0);
-  // Monday = 0, Sunday = 6
   let startDow = firstDay.getDay() - 1;
   if (startDow < 0) startDow = 6;
 
@@ -67,6 +72,7 @@ function formatDate(d: Date) {
 
 export default function TrainerPage() {
   const router = useRouter();
+  const [lang, setLang] = useState<Lang>("nl");
   const [user, setUser] = useState<{ id: number; name: string; role: string } | null>(null);
   const [schedule, setSchedule] = useState<ScheduleSlot[]>([]);
   const [trainers, setTrainers] = useState<Trainer[]>([]);
@@ -94,6 +100,8 @@ export default function TrainerPage() {
   });
   const [submitting, setSubmitting] = useState(false);
 
+  const _ = useCallback((key: Parameters<typeof tr>[0]) => tr(key, lang), [lang]);
+
   const loadHours = useCallback(async (userId: number) => {
     const res = await fetch(`/api/hours?trainer_id=${userId}`);
     setHours(await res.json());
@@ -111,19 +119,27 @@ export default function TrainerPage() {
     if (parsed.role === "admin") { router.push("/admin"); return; }
     setUser(parsed);
 
+    // Restore language preference
+    const savedLang = localStorage.getItem("vbsk_lang");
+    if (savedLang === "en" || savedLang === "nl") setLang(savedLang);
+
     fetch("/api/schedule").then((r) => r.json()).then(setSchedule);
     fetch("/api/trainers").then((r) => r.json()).then((data: Trainer[]) => setTrainers(data));
     loadHours(parsed.id);
     loadExpenses(parsed.id);
   }, [router, loadHours, loadExpenses]);
 
-  // Build set of days-of-week where this trainer has scheduled slots
+  function toggleLang() {
+    const next = lang === "nl" ? "en" : "nl";
+    setLang(next);
+    localStorage.setItem("vbsk_lang", next);
+  }
+
   const myScheduleDays = useMemo(() => {
     if (!user) return new Set<number>();
     return new Set(schedule.filter((s) => s.trainer_id === user.id).map((s) => s.day_of_week));
   }, [schedule, user]);
 
-  // Build map of dates with submitted hours
   const hoursByDate = useMemo(() => {
     const map: Record<string, HourEntry[]> = {};
     for (const h of hours) {
@@ -133,7 +149,6 @@ export default function TrainerPage() {
     return map;
   }, [hours]);
 
-  // Get slots for a specific date
   function getSlotsForDate(dateStr: string) {
     const d = new Date(dateStr + "T00:00:00");
     const dow = d.getDay();
@@ -239,8 +254,28 @@ export default function TrainerPage() {
     router.push("/");
   }
 
+  // Translated helpers
+  function statusLabel(status: string) {
+    if (status === "ingediend") return _("ingediend");
+    if (status === "goedgekeurd") return _("goedgekeurd");
+    if (status === "afgewezen") return _("afgewezen");
+    return status;
+  }
+
+  function catLabel(cat: string) {
+    const map: Record<string, Parameters<typeof tr>[0]> = {
+      benzine: "cat_benzine",
+      materiaal: "cat_materiaal",
+      parkeren: "cat_parkeren",
+      overig: "cat_overig",
+    };
+    return map[cat] ? _(map[cat]) : cat;
+  }
+
   if (!user) return null;
 
+  const dayLabels = lang === "nl" ? DAY_LABELS_NL : DAY_LABELS_EN;
+  const monthNames = lang === "nl" ? MONTH_NAMES_NL : MONTH_NAMES_EN;
   const days = getMonthDays(calYear, calMonth);
   const todayStr = formatDate(new Date());
 
@@ -248,13 +283,6 @@ export default function TrainerPage() {
     ingediend: "bg-yellow-100 text-yellow-800",
     goedgekeurd: "bg-green-100 text-green-800",
     afgewezen: "bg-red-100 text-red-800",
-  };
-
-  const categoryLabels: Record<string, string> = {
-    benzine: "Benzine",
-    materiaal: "Materiaal",
-    parkeren: "Parkeren",
-    overig: "Overig",
   };
 
   const selectedSlots = selectedDate ? getSlotsForDate(selectedDate) : [];
@@ -265,12 +293,21 @@ export default function TrainerPage() {
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-xl font-bold text-gray-900">Hoi, {user.name.split(" ")[0]}</h1>
-          <p className="text-sm text-gray-500">VBSK Urenregistratie</p>
+          <h1 className="text-xl font-bold text-gray-900">{_("greeting")}, {user.name.split(" ")[0]}</h1>
+          <p className="text-sm text-gray-500">{_("subtitle")}</p>
         </div>
-        <button onClick={logout} className="text-sm text-gray-500 hover:text-gray-700">
-          Uitloggen
-        </button>
+        <div className="flex items-center gap-3">
+          <button
+            onClick={toggleLang}
+            className="text-xs font-medium bg-gray-100 hover:bg-gray-200 px-2.5 py-1.5 rounded-lg transition"
+            title={lang === "nl" ? "Switch to English" : "Schakel naar Nederlands"}
+          >
+            {lang === "nl" ? "EN" : "NL"}
+          </button>
+          <button onClick={logout} className="text-sm text-gray-500 hover:text-gray-700">
+            {_("logout")}
+          </button>
+        </div>
       </div>
 
       {/* Maandkalender */}
@@ -282,7 +319,7 @@ export default function TrainerPage() {
             </svg>
           </button>
           <h2 className="font-semibold text-gray-900">
-            {MONTH_NAMES[calMonth]} {calYear}
+            {monthNames[calMonth]} {calYear}
           </h2>
           <button onClick={nextMonth} className="p-1.5 hover:bg-gray-100 rounded-lg transition">
             <svg className="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -293,7 +330,7 @@ export default function TrainerPage() {
 
         {/* Day headers */}
         <div className="grid grid-cols-7 gap-1 mb-1">
-          {DAY_LABELS.map((d) => (
+          {dayLabels.map((d) => (
             <div key={d} className="text-center text-xs font-medium text-gray-400 py-1">
               {d}
             </div>
@@ -337,11 +374,11 @@ export default function TrainerPage() {
         <div className="flex items-center gap-4 mt-3 pt-3 border-t">
           <div className="flex items-center gap-1.5">
             <span className="w-3 h-3 rounded bg-red-600" />
-            <span className="text-xs text-gray-500">Uren ingediend</span>
+            <span className="text-xs text-gray-500">{_("legend_submitted")}</span>
           </div>
           <div className="flex items-center gap-1.5">
             <span className="w-3 h-3 rounded bg-red-50 border border-red-200" />
-            <span className="text-xs text-gray-500">Werkdag (rooster)</span>
+            <span className="text-xs text-gray-500">{_("legend_workday")}</span>
           </div>
         </div>
       </div>
@@ -350,17 +387,17 @@ export default function TrainerPage() {
       {selectedDate && (
         <div className="bg-white rounded-xl shadow-sm border p-4 mb-6">
           <h2 className="font-semibold text-gray-900 mb-3">
-            {new Date(selectedDate + "T00:00:00").toLocaleDateString("nl-NL", {
+            {new Date(selectedDate + "T00:00:00").toLocaleDateString(lang === "nl" ? "nl-NL" : "en-GB", {
               weekday: "long",
               day: "numeric",
               month: "long",
             })}
           </h2>
 
-          {/* Roosterslots voor deze dag */}
+          {/* Roosterslots */}
           {selectedSlots.length > 0 && (
             <div className="mb-3">
-              <p className="text-xs font-medium text-gray-500 uppercase mb-2">Rooster</p>
+              <p className="text-xs font-medium text-gray-500 uppercase mb-2">{_("schedule_label")}</p>
               <div className="space-y-1.5">
                 {selectedSlots.map((slot) => (
                   <button
@@ -377,7 +414,7 @@ export default function TrainerPage() {
                       <span className="text-xs text-gray-500">{slot.trainer_name}</span>
                     </div>
                     {slot.trainer_id === user.id && (
-                      <span className="text-xs text-red-600 font-medium">Jouw les</span>
+                      <span className="text-xs text-red-600 font-medium">{_("your_class")}</span>
                     )}
                   </button>
                 ))}
@@ -385,10 +422,10 @@ export default function TrainerPage() {
             </div>
           )}
 
-          {/* Ingediende uren voor deze dag */}
+          {/* Ingediende uren */}
           {selectedHours.length > 0 && (
             <div className="mb-3">
-              <p className="text-xs font-medium text-gray-500 uppercase mb-2">Ingediend</p>
+              <p className="text-xs font-medium text-gray-500 uppercase mb-2">{_("submitted_label")}</p>
               <div className="space-y-1.5">
                 {selectedHours.map((h) => (
                   <div key={h.id} className="p-2.5 rounded-lg border border-gray-200">
@@ -396,11 +433,11 @@ export default function TrainerPage() {
                       <span className="font-medium text-sm">{h.start_time}-{h.end_time}</span>
                       <div className="flex items-center gap-2">
                         <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${statusColors[h.status] || ""}`}>
-                          {h.status}
+                          {statusLabel(h.status)}
                         </span>
                         <button
                           onClick={async () => {
-                            if (!confirm("Weet je zeker dat je deze uren wilt verwijderen?")) return;
+                            if (!confirm(_("confirm_delete_hours"))) return;
                             await fetch("/api/hours", {
                               method: "DELETE",
                               headers: { "Content-Type": "application/json" },
@@ -409,7 +446,6 @@ export default function TrainerPage() {
                             loadHours(user.id);
                           }}
                           className="text-xs text-red-500 hover:text-red-700 transition"
-                          title="Verwijderen"
                         >
                           <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                             <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
@@ -418,11 +454,11 @@ export default function TrainerPage() {
                       </div>
                     </div>
                     <p className="text-xs text-gray-500 mt-0.5">
-                      {h.type === "inval" ? `Inval voor ${h.substitute_for_name}` : "Regulier"}
+                      {h.type === "inval" ? `${_("inval_voor")} ${h.substitute_for_name}` : _("regulier")}
                       {h.remark && ` — ${h.remark}`}
                     </p>
                     {h.status === "afgewezen" && h.reject_reason && (
-                      <p className="text-xs text-red-600 mt-0.5">Reden: {h.reject_reason}</p>
+                      <p className="text-xs text-red-600 mt-0.5">{_("reason")}: {h.reject_reason}</p>
                     )}
                   </div>
                 ))}
@@ -434,7 +470,7 @@ export default function TrainerPage() {
             onClick={() => openManualForm(selectedDate)}
             className="w-full py-2 border-2 border-dashed border-gray-300 rounded-lg text-sm text-gray-500 hover:border-red-400 hover:text-red-600 transition"
           >
-            + Uren toevoegen voor deze dag
+            {_("add_hours")}
           </button>
         </div>
       )}
@@ -442,10 +478,10 @@ export default function TrainerPage() {
       {/* Invoerformulier uren */}
       {showForm && (
         <div className="bg-white rounded-xl shadow-sm border p-4 mb-6">
-          <h2 className="font-semibold text-gray-900 mb-3">Uren invoeren</h2>
+          <h2 className="font-semibold text-gray-900 mb-3">{_("form_title")}</h2>
           <form onSubmit={handleSubmit} className="space-y-3">
             <div>
-              <label className="block text-sm text-gray-600 mb-1">Datum</label>
+              <label className="block text-sm text-gray-600 mb-1">{_("form_date")}</label>
               <input
                 type="date"
                 value={form.date}
@@ -456,7 +492,7 @@ export default function TrainerPage() {
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="block text-sm text-gray-600 mb-1">Begintijd</label>
+                <label className="block text-sm text-gray-600 mb-1">{_("form_start")}</label>
                 <input
                   type="time"
                   value={form.start_time}
@@ -466,7 +502,7 @@ export default function TrainerPage() {
                 />
               </div>
               <div>
-                <label className="block text-sm text-gray-600 mb-1">Eindtijd</label>
+                <label className="block text-sm text-gray-600 mb-1">{_("form_end")}</label>
                 <input
                   type="time"
                   value={form.end_time}
@@ -477,26 +513,26 @@ export default function TrainerPage() {
               </div>
             </div>
             <div>
-              <label className="block text-sm text-gray-600 mb-1">Type</label>
+              <label className="block text-sm text-gray-600 mb-1">{_("form_type")}</label>
               <select
                 value={form.type}
                 onChange={(e) => setForm({ ...form, type: e.target.value })}
                 className="w-full border rounded-lg px-3 py-2 text-sm"
               >
-                <option value="regulier">Regulier</option>
-                <option value="inval">Inval</option>
+                <option value="regulier">{_("form_type_regulier")}</option>
+                <option value="inval">{_("form_type_inval")}</option>
               </select>
             </div>
             {form.type === "inval" && (
               <div>
-                <label className="block text-sm text-gray-600 mb-1">Inval voor</label>
+                <label className="block text-sm text-gray-600 mb-1">{_("form_inval_for")}</label>
                 <select
                   value={form.substitute_for_id}
                   onChange={(e) => setForm({ ...form, substitute_for_id: e.target.value })}
                   className="w-full border rounded-lg px-3 py-2 text-sm"
                   required
                 >
-                  <option value="">Selecteer trainer...</option>
+                  <option value="">{_("form_select_trainer")}</option>
                   {trainers
                     .filter((t) => t.id !== user.id)
                     .map((t) => (
@@ -508,7 +544,7 @@ export default function TrainerPage() {
               </div>
             )}
             <div>
-              <label className="block text-sm text-gray-600 mb-1">Opmerking (optioneel)</label>
+              <label className="block text-sm text-gray-600 mb-1">{_("form_remark")}</label>
               <textarea
                 value={form.remark}
                 onChange={(e) => setForm({ ...form, remark: e.target.value })}
@@ -522,14 +558,14 @@ export default function TrainerPage() {
                 disabled={submitting}
                 className="flex-1 bg-red-600 text-white rounded-lg py-2 text-sm font-medium hover:bg-red-700 transition disabled:opacity-50"
               >
-                {submitting ? "Opslaan..." : "Indienen"}
+                {submitting ? _("form_saving") : _("form_submit")}
               </button>
               <button
                 type="button"
                 onClick={() => setShowForm(false)}
                 className="px-4 py-2 border rounded-lg text-sm text-gray-600 hover:bg-gray-50"
               >
-                Annuleer
+                {_("form_cancel")}
               </button>
             </div>
           </form>
@@ -539,19 +575,19 @@ export default function TrainerPage() {
       {/* Onkosten sectie */}
       <div className="bg-white rounded-xl shadow-sm border p-4">
         <div className="flex items-center justify-between mb-3">
-          <h2 className="font-semibold text-gray-900">Onkosten</h2>
+          <h2 className="font-semibold text-gray-900">{_("expenses_title")}</h2>
           <button
             onClick={() => setShowExpenseForm(!showExpenseForm)}
             className="text-xs bg-red-600 text-white px-3 py-1.5 rounded-lg hover:bg-red-700 transition"
           >
-            + Toevoegen
+            {_("expenses_add")}
           </button>
         </div>
 
         {showExpenseForm && (
           <form onSubmit={handleExpenseSubmit} className="space-y-3 mb-4 p-3 bg-gray-50 rounded-lg">
             <div>
-              <label className="block text-sm text-gray-600 mb-1">Datum</label>
+              <label className="block text-sm text-gray-600 mb-1">{_("expense_date")}</label>
               <input
                 type="date"
                 value={expenseForm.date}
@@ -562,7 +598,7 @@ export default function TrainerPage() {
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="block text-sm text-gray-600 mb-1">Bedrag (&euro;)</label>
+                <label className="block text-sm text-gray-600 mb-1">{_("expense_amount")} (&euro;)</label>
                 <input
                   type="number"
                   step="0.01"
@@ -575,26 +611,26 @@ export default function TrainerPage() {
                 />
               </div>
               <div>
-                <label className="block text-sm text-gray-600 mb-1">Categorie</label>
+                <label className="block text-sm text-gray-600 mb-1">{_("expense_category")}</label>
                 <select
                   value={expenseForm.category}
                   onChange={(e) => setExpenseForm({ ...expenseForm, category: e.target.value })}
                   className="w-full border rounded-lg px-3 py-2 text-sm"
                 >
-                  <option value="benzine">Benzine</option>
-                  <option value="materiaal">Materiaal</option>
-                  <option value="parkeren">Parkeren</option>
-                  <option value="overig">Overig</option>
+                  <option value="benzine">{_("cat_benzine")}</option>
+                  <option value="materiaal">{_("cat_materiaal")}</option>
+                  <option value="parkeren">{_("cat_parkeren")}</option>
+                  <option value="overig">{_("cat_overig")}</option>
                 </select>
               </div>
             </div>
             <div>
-              <label className="block text-sm text-gray-600 mb-1">Omschrijving</label>
+              <label className="block text-sm text-gray-600 mb-1">{_("expense_description")}</label>
               <input
                 type="text"
                 value={expenseForm.description}
                 onChange={(e) => setExpenseForm({ ...expenseForm, description: e.target.value })}
-                placeholder="bijv. Reiskosten heen en terug"
+                placeholder={_("expense_placeholder")}
                 className="w-full border rounded-lg px-3 py-2 text-sm"
                 required
               />
@@ -605,21 +641,21 @@ export default function TrainerPage() {
                 disabled={submitting}
                 className="flex-1 bg-red-600 text-white rounded-lg py-2 text-sm font-medium hover:bg-red-700 transition disabled:opacity-50"
               >
-                {submitting ? "Opslaan..." : "Indienen"}
+                {submitting ? _("form_saving") : _("form_submit")}
               </button>
               <button
                 type="button"
                 onClick={() => setShowExpenseForm(false)}
                 className="px-4 py-2 border rounded-lg text-sm text-gray-600 hover:bg-gray-50"
               >
-                Annuleer
+                {_("form_cancel")}
               </button>
             </div>
           </form>
         )}
 
         {expenses.length === 0 ? (
-          <p className="text-sm text-gray-500 text-center py-4">Nog geen onkosten ingediend</p>
+          <p className="text-sm text-gray-500 text-center py-4">{_("expenses_empty")}</p>
         ) : (
           <div className="space-y-2">
             {expenses.map((exp) => (
@@ -630,16 +666,16 @@ export default function TrainerPage() {
                       {exp.date} &middot; &euro;{exp.amount.toFixed(2)}
                     </p>
                     <p className="text-xs text-gray-500 mt-0.5">
-                      {categoryLabels[exp.category] || exp.category} — {exp.description}
+                      {catLabel(exp.category)} — {exp.description}
                     </p>
                   </div>
                   <div className="flex items-center gap-2">
                     <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${statusColors[exp.status] || ""}`}>
-                      {exp.status}
+                      {statusLabel(exp.status)}
                     </span>
                     <button
                       onClick={async () => {
-                        if (!confirm("Weet je zeker dat je deze onkosten wilt verwijderen?")) return;
+                        if (!confirm(_("confirm_delete_expense"))) return;
                         await fetch("/api/expenses", {
                           method: "DELETE",
                           headers: { "Content-Type": "application/json" },
@@ -648,7 +684,6 @@ export default function TrainerPage() {
                         loadExpenses(user.id);
                       }}
                       className="text-xs text-red-500 hover:text-red-700 transition"
-                      title="Verwijderen"
                     >
                       <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                         <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
@@ -657,7 +692,7 @@ export default function TrainerPage() {
                   </div>
                 </div>
                 {exp.status === "afgewezen" && exp.reject_reason && (
-                  <p className="text-xs text-red-600 mt-1">Reden: {exp.reject_reason}</p>
+                  <p className="text-xs text-red-600 mt-1">{_("reason")}: {exp.reject_reason}</p>
                 )}
               </div>
             ))}
