@@ -43,7 +43,15 @@ export async function PUT(req: NextRequest) {
 }
 
 export async function DELETE(req: NextRequest) {
-  const { id } = await req.json();
-  await supabase.from("trainers").update({ active: false }).eq("id", id);
+  const { id, permanent } = await req.json();
+  if (permanent) {
+    // Delete related hours and expenses first, then the trainer
+    await supabase.from("hours").delete().eq("trainer_id", id);
+    await supabase.from("expenses").delete().eq("trainer_id", id);
+    await supabase.from("schedule").delete().eq("trainer_id", id);
+    await supabase.from("trainers").delete().eq("id", id);
+  } else {
+    await supabase.from("trainers").update({ active: false }).eq("id", id);
+  }
   return NextResponse.json({ ok: true });
 }
