@@ -633,9 +633,28 @@ export default function TrainerPage() {
                       {categoryLabels[exp.category] || exp.category} — {exp.description}
                     </p>
                   </div>
-                  <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${statusColors[exp.status] || ""}`}>
-                    {exp.status}
-                  </span>
+                  <div className="flex items-center gap-2">
+                    <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${statusColors[exp.status] || ""}`}>
+                      {exp.status}
+                    </span>
+                    <button
+                      onClick={async () => {
+                        if (!confirm("Weet je zeker dat je deze onkosten wilt verwijderen?")) return;
+                        await fetch("/api/expenses", {
+                          method: "DELETE",
+                          headers: { "Content-Type": "application/json" },
+                          body: JSON.stringify({ id: exp.id }),
+                        });
+                        loadExpenses(user.id);
+                      }}
+                      className="text-xs text-red-500 hover:text-red-700 transition"
+                      title="Verwijderen"
+                    >
+                      <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                      </svg>
+                    </button>
+                  </div>
                 </div>
                 {exp.status === "afgewezen" && exp.reject_reason && (
                   <p className="text-xs text-red-600 mt-1">Reden: {exp.reject_reason}</p>

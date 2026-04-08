@@ -53,3 +53,14 @@ export async function PUT(req: NextRequest) {
 
   return NextResponse.json({ ok: true });
 }
+
+export async function DELETE(req: NextRequest) {
+  const { id } = await req.json();
+
+  await supabase
+    .from("expenses")
+    .delete()
+    .eq("id", id);
+
+  return NextResponse.json({ ok: true });
+}

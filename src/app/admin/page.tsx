@@ -462,22 +462,41 @@ export default function AdminPage() {
                             <p className="text-xs text-red-600 mt-0.5">Reden: {exp.reject_reason}</p>
                           )}
                         </div>
-                        {exp.status === "ingediend" && (
-                          <div className="flex gap-1 shrink-0">
-                            <button
-                              onClick={() => approveExpense(exp.id)}
-                              className="px-3 py-1.5 bg-green-600 text-white text-xs rounded-lg hover:bg-green-700 transition"
-                            >
-                              Goedkeuren
-                            </button>
-                            <button
-                              onClick={() => { setRejectId(exp.id); setRejectType("expense"); }}
-                              className="px-3 py-1.5 bg-red-600 text-white text-xs rounded-lg hover:bg-red-700 transition"
-                            >
-                              Afwijzen
-                            </button>
-                          </div>
-                        )}
+                        <div className="flex gap-1 shrink-0">
+                          {exp.status === "ingediend" && (
+                            <>
+                              <button
+                                onClick={() => approveExpense(exp.id)}
+                                className="px-3 py-1.5 bg-green-600 text-white text-xs rounded-lg hover:bg-green-700 transition"
+                              >
+                                Goedkeuren
+                              </button>
+                              <button
+                                onClick={() => { setRejectId(exp.id); setRejectType("expense"); }}
+                                className="px-3 py-1.5 bg-red-600 text-white text-xs rounded-lg hover:bg-red-700 transition"
+                              >
+                                Afwijzen
+                              </button>
+                            </>
+                          )}
+                          <button
+                            onClick={async () => {
+                              if (!confirm("Weet je zeker dat je deze onkosten wilt verwijderen?")) return;
+                              await fetch("/api/expenses", {
+                                method: "DELETE",
+                                headers: { "Content-Type": "application/json" },
+                                body: JSON.stringify({ id: exp.id }),
+                              });
+                              loadExpenses();
+                            }}
+                            className="px-2 py-1.5 text-gray-400 hover:text-red-600 text-xs transition"
+                            title="Verwijderen"
+                          >
+                            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                            </svg>
+                          </button>
+                        </div>
                       </div>
                     ))}
                   </div>
