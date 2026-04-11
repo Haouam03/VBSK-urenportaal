@@ -1,0 +1,256 @@
+@import url("https://fonts.googleapis.com/css2?family=Press+Start+2P&family=VT323&display=swap");
+
+/* CRT Scanline overlay */
+.crt-overlay {
+  pointer-events: none;
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  background: repeating-linear-gradient(
+    0deg,
+    rgba(0, 0, 0, 0.15) 0px,
+    rgba(0, 0, 0, 0.15) 1px,
+    transparent 1px,
+    transparent 3px
+  );
+}
+
+/* Neon text glow effects */
+.neon-green {
+  color: #39ff14;
+  text-shadow: 0 0 7px #39ff14, 0 0 10px #39ff14, 0 0 21px #39ff14,
+    0 0 42px #0fa;
+}
+
+.neon-cyan {
+  color: #00fff7;
+  text-shadow: 0 0 7px #00fff7, 0 0 10px #00fff7, 0 0 21px #00fff7,
+    0 0 42px #0ff;
+}
+
+.neon-pink {
+  color: #ff2d95;
+  text-shadow: 0 0 7px #ff2d95, 0 0 10px #ff2d95, 0 0 21px #ff2d95,
+    0 0 42px #f09;
+}
+
+.neon-yellow {
+  color: #ffe600;
+  text-shadow: 0 0 7px #ffe600, 0 0 10px #ffe600, 0 0 21px #ffe600,
+    0 0 42px #ff0;
+}
+
+/* Neon button style */
+.arcade-btn {
+  font-family: "Press Start 2P", monospace;
+  font-size: 0.7rem;
+  padding: 14px 28px;
+  border: 2px solid;
+  background: transparent;
+  cursor: pointer;
+  text-transform: uppercase;
+  transition: all 0.15s ease;
+  position: relative;
+  letter-spacing: 1px;
+}
+
+.arcade-btn-green {
+  color: #39ff14;
+  border-color: #39ff14;
+  box-shadow: 0 0 10px rgba(57, 255, 20, 0.3), inset 0 0 10px rgba(57, 255, 20, 0.1);
+}
+
+.arcade-btn-green:hover,
+.arcade-btn-green:active {
+  background: rgba(57, 255, 20, 0.15);
+  box-shadow: 0 0 20px rgba(57, 255, 20, 0.5), inset 0 0 20px rgba(57, 255, 20, 0.2);
+}
+
+.arcade-btn-cyan {
+  color: #00fff7;
+  border-color: #00fff7;
+  box-shadow: 0 0 10px rgba(0, 255, 247, 0.3), inset 0 0 10px rgba(0, 255, 247, 0.1);
+}
+
+.arcade-btn-cyan:hover,
+.arcade-btn-cyan:active {
+  background: rgba(0, 255, 247, 0.15);
+  box-shadow: 0 0 20px rgba(0, 255, 247, 0.5), inset 0 0 20px rgba(0, 255, 247, 0.2);
+}
+
+.arcade-btn-pink {
+  color: #ff2d95;
+  border-color: #ff2d95;
+  box-shadow: 0 0 10px rgba(255, 45, 149, 0.3), inset 0 0 10px rgba(255, 45, 149, 0.1);
+}
+
+.arcade-btn-pink:hover,
+.arcade-btn-pink:active {
+  background: rgba(255, 45, 149, 0.15);
+  box-shadow: 0 0 20px rgba(255, 45, 149, 0.5), inset 0 0 20px rgba(255, 45, 149, 0.2);
+}
+
+.arcade-btn-yellow {
+  color: #ffe600;
+  border-color: #ffe600;
+  box-shadow: 0 0 10px rgba(255, 230, 0, 0.3), inset 0 0 10px rgba(255, 230, 0, 0.1);
+}
+
+.arcade-btn-yellow:hover,
+.arcade-btn-yellow:active {
+  background: rgba(255, 230, 0, 0.15);
+  box-shadow: 0 0 20px rgba(255, 230, 0, 0.5), inset 0 0 20px rgba(255, 230, 0, 0.2);
+}
+
+.arcade-btn:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+
+/* Arcade input style */
+.arcade-input {
+  font-family: "VT323", monospace;
+  font-size: 1.5rem;
+  background: rgba(0, 255, 247, 0.05);
+  border: 2px solid #00fff7;
+  color: #00fff7;
+  padding: 12px 16px;
+  text-align: center;
+  outline: none;
+  width: 100%;
+  box-shadow: 0 0 10px rgba(0, 255, 247, 0.2), inset 0 0 10px rgba(0, 255, 247, 0.05);
+}
+
+.arcade-input:focus {
+  box-shadow: 0 0 20px rgba(0, 255, 247, 0.4), inset 0 0 20px rgba(0, 255, 247, 0.1);
+}
+
+.arcade-input::placeholder {
+  color: rgba(0, 255, 247, 0.3);
+}
+
+/* Room code special input */
+.room-code-input {
+  font-family: "Press Start 2P", monospace;
+  font-size: 2rem;
+  letter-spacing: 0.5em;
+  max-width: 220px;
+}
+
+/* Room code display */
+.room-code-display {
+  font-family: "Press Start 2P", monospace;
+  font-size: 2.5rem;
+  letter-spacing: 0.3em;
+  color: #ffe600;
+  text-shadow: 0 0 10px #ffe600, 0 0 20px #ffe600, 0 0 40px #ff0;
+}
+
+/* Player list item */
+.player-item {
+  font-family: "VT323", monospace;
+  font-size: 1.5rem;
+  color: #39ff14;
+  padding: 8px 16px;
+  border-bottom: 1px solid rgba(57, 255, 20, 0.2);
+}
+
+.player-item:last-child {
+  border-bottom: none;
+}
+
+/* Bracket match card */
+.match-card {
+  border: 1px solid rgba(0, 255, 247, 0.3);
+  background: rgba(0, 255, 247, 0.03);
+  padding: 8px 12px;
+  min-width: 180px;
+}
+
+.match-card-winner {
+  border-color: #39ff14;
+  background: rgba(57, 255, 20, 0.05);
+}
+
+/* Score input */
+.score-input {
+  font-family: "Press Start 2P", monospace;
+  font-size: 1rem;
+  width: 50px;
+  height: 40px;
+  text-align: center;
+  background: rgba(255, 230, 0, 0.05);
+  border: 1px solid #ffe600;
+  color: #ffe600;
+  outline: none;
+}
+
+.score-input:focus {
+  box-shadow: 0 0 10px rgba(255, 230, 0, 0.4);
+}
+
+/* Trophy animation */
+@keyframes trophy-bounce {
+  0%, 100% { transform: scale(1) rotate(0deg); }
+  25% { transform: scale(1.1) rotate(-5deg); }
+  50% { transform: scale(1.2) rotate(0deg); }
+  75% { transform: scale(1.1) rotate(5deg); }
+}
+
+.trophy-animate {
+  animation: trophy-bounce 2s ease-in-out infinite;
+  display: inline-block;
+}
+
+/* Confetti particles */
+@keyframes confetti-fall {
+  0% { transform: translateY(-100vh) rotate(0deg); opacity: 1; }
+  100% { transform: translateY(100vh) rotate(720deg); opacity: 0; }
+}
+
+.confetti-piece {
+  position: fixed;
+  width: 10px;
+  height: 10px;
+  top: -10px;
+  animation: confetti-fall linear forwards;
+}
+
+/* Insert coin blink */
+.insert-coin {
+  animation: blink 1s step-end infinite;
+}
+
+@keyframes blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0; }
+}
+
+/* Ping pong ball animation for title */
+@keyframes ball-bounce {
+  0%, 100% { transform: translateX(0); }
+  50% { transform: translateX(calc(100vw - 60px)); }
+}
+
+.ball-bounce {
+  animation: ball-bounce 3s ease-in-out infinite;
+}
+
+/* Bracket connector lines */
+.bracket-connector {
+  border-color: rgba(0, 255, 247, 0.3);
+}
+
+/* Scrollbar styling */
+.arcade-scroll::-webkit-scrollbar {
+  width: 6px;
+}
+
+.arcade-scroll::-webkit-scrollbar-track {
+  background: #111;
+}
+
+.arcade-scroll::-webkit-scrollbar-thumb {
+  background: #39ff14;
+  border-radius: 3px;
+}
